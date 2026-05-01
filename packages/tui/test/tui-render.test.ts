@@ -281,6 +281,56 @@ describe("TUI differential rendering", () => {
 		tui.stop();
 	});
 
+	it("does not full redraw when only an offscreen line changes", async () => {
+		const terminal = new LoggingVirtualTerminal(20, 5);
+		const tui = new TUI(terminal);
+		const component = new TestComponent();
+		tui.addChild(component);
+
+		component.lines = Array.from({ length: 8 }, (_, i) => `Line ${i}`);
+		tui.start();
+		await terminal.waitForRender();
+
+		const initialRedraws = tui.fullRedraws;
+		terminal.clearWrites();
+
+		component.lines = [...component.lines];
+		component.lines[2] = "Changed offscreen";
+		tui.requestRender();
+		await terminal.waitForRender();
+
+		assert.strictEqual(tui.fullRedraws, initialRedraws, "Offscreen change should not full redraw");
+		assert.ok(!terminal.getWrites().includes("\x1b[2J"), "Offscreen change should not clear the screen");
+		assert.deepStrictEqual(terminal.getViewport(), ["Line 3", "Line 4", "Line 5", "Line 6", "Line 7"]);
+
+		tui.stop();
+	});
+
+	it("renders appended content without full redraw when an offscreen line also changes", async () => {
+		const terminal = new LoggingVirtualTerminal(20, 5);
+		const tui = new TUI(terminal);
+		const component = new TestComponent();
+		tui.addChild(component);
+
+		component.lines = Array.from({ length: 8 }, (_, i) => `Line ${i}`);
+		tui.start();
+		await terminal.waitForRender();
+
+		const initialRedraws = tui.fullRedraws;
+		terminal.clearWrites();
+
+		component.lines = [...component.lines, "Line 8"];
+		component.lines[2] = "Changed offscreen";
+		tui.requestRender();
+		await terminal.waitForRender();
+
+		assert.strictEqual(tui.fullRedraws, initialRedraws, "Visible append should stay differential");
+		assert.ok(!terminal.getWrites().includes("\x1b[2J"), "Visible append should not clear the screen");
+		assert.deepStrictEqual(terminal.getViewport(), ["Line 4", "Line 5", "Line 6", "Line 7", "Line 8"]);
+
+		tui.stop();
+	});
+
 	it("resets styles after each rendered line", async () => {
 		const terminal = new VirtualTerminal(20, 6);
 		const tui = new TUI(terminal);

@@ -1003,6 +1003,40 @@ export class TUI extends Container {
 			}
 			lastChanged = newLines.length - 1;
 		}
+
+		// If the earliest change is above the visible viewport, ignore it for terminal output
+		// and render only visible changes. This prevents offscreen animations (e.g. a
+		// long-running bash spinner) from forcing full-screen redraws while content below
+		// streams. If no visible rows changed, update the retained render state only.
+		if (firstChanged !== -1 && firstChanged < prevViewportTop && newLines.length >= this.previousLines.length) {
+			let visibleFirstChanged = -1;
+			let visibleLastChanged = -1;
+			for (let i = prevViewportTop; i < maxLines; i++) {
+				const oldLine = i < this.previousLines.length ? this.previousLines[i] : "";
+				const newLine = i < newLines.length ? newLines[i] : "";
+				if (oldLine !== newLine) {
+					if (visibleFirstChanged === -1) {
+						visibleFirstChanged = i;
+					}
+					visibleLastChanged = i;
+				}
+			}
+
+			if (visibleFirstChanged === -1) {
+				this.cursorRow = Math.max(0, newLines.length - 1);
+				this.maxLinesRendered = Math.max(this.maxLinesRendered, newLines.length);
+				this.positionHardwareCursor(cursorPos, newLines.length);
+				this.previousLines = newLines;
+				this.previousWidth = width;
+				this.previousHeight = height;
+				this.previousViewportTop = prevViewportTop;
+				return;
+			}
+
+			firstChanged = visibleFirstChanged;
+			lastChanged = visibleLastChanged;
+		}
+
 		const appendStart = appendedLines && firstChanged === this.previousLines.length && firstChanged > 0;
 
 		// No changes - but still need to update hardware cursor position if it moved
